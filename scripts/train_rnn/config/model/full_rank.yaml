@@ -1,0 +1,5 @@
+_target_: hyper_lrrnn.rnn.full_rank.FullRankRNN
+_partial_: true
+alpha: 0.1
+activation: tanh
+hidden_size: 500

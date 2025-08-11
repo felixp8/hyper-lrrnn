@@ -1,0 +1,6 @@
+_target_: hyper_lrrnn.tasks.dm.MultiDM
+_partial_: true
+dt: 20
+signal: "mean"
+target: "1"
+thresholds: [-0.5, 0.0, 0.5]

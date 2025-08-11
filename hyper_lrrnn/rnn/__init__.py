@@ -1,0 +1,3 @@
+from hyper_lrrnn.rnn.full_rank import FullRankRNN, FullRankRNNWithReadout
+from hyper_lrrnn.rnn.low_rank import LowRankRNN, LowRankRNNWithReadout
+from hyper_lrrnn.rnn.mixture_low_rank import MixtureLowRankRNN, MixtureLowRankRNNWithReadout

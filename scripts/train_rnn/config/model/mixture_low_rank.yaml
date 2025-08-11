@@ -1,0 +1,7 @@
+_target_: hyper_lrrnn.rnn.mixture_low_rank.MixtureLowRankRNN
+_partial_: true
+alpha: 0.1
+activation: tanh
+rank: 2
+num_mixtures: 1
+hidden_size: 500

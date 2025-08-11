@@ -1,0 +1,38 @@
+defaults:
+  - model: low_rank_readout
+  - task: multi_dm_m1
+  - _self_
+
+run_name: run-${now:%Y-%m-%d_%H-%M-%S}
+
+batch_size: 200
+dataset:
+  dataset_size: 2000
+  train_frac: 0.8
+  noise_std: 0.1
+  seed: 0
+
+optimizer:
+  init_lr: 1e-3
+  weight_decay: 0.0
+
+trainer:
+  max_epochs: 300
+  log_every_n_steps: 8
+  enable_model_summary: false
+  enable_checkpointing: false
+  enable_progress_bar: true
+
+logger: 
+  _target_: lightning.pytorch.loggers.WandbLogger
+  _partial_: true
+  project: hyper-lrrnn
+  name: ${run_name}
+  save_dir: results/${run_name}/wandb_logs
+
+hydra:
+  run:
+    dir: results/${run_name}/hydra_logs/local
+  sweep:
+    dir: results/${run_name}/hydra_logs
+    subdir: ${hydra.job.override_dirname}
