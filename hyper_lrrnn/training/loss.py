@@ -35,7 +35,7 @@ def lin_reg_r2(inputs, targets, alpha=0.0):
 
 @torch.no_grad()
 def lin_reg_acc(inputs, targets, alpha=0.0, threshold=0.5, window=10):
-    orig_targets_shape = y.shape
+    orig_targets_shape = targets.shape
     X = inputs.reshape(-1, inputs.shape[-1])
     y = targets.reshape(-1, targets.shape[-1])
     if alpha > 0:
