@@ -4,7 +4,7 @@ import torch.nn as nn
 
 
 class FullRankRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, alpha=0.1, activation="tanh"):
+    def __init__(self, input_size, hidden_size, alpha=0.1, activation="tanh", output_size=None):
         super(FullRankRNN, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size

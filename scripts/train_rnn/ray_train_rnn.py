@@ -1,4 +1,5 @@
 import hydra
+import numpy as np
 import torch
 from omegaconf import OmegaConf
 import lightning as L
@@ -13,13 +14,17 @@ from hyper_lrrnn.training.trainer import RNNLightningModule
 from hyper_lrrnn.training.utils import sample_dataset
 
 
+root_dir = Path(__file__).parent
+
 
 @hydra.main(config_path="config", config_name="config", version_base="1.1")
 def main(cfg):
     ray.init(
-        _temp_dir=str(Path(f"/data/user_data/fcpei/ray/").absolute()),
+        # _temp_dir=str((root_dir / "ray").absolute()),
     )
 
+    task_signal = cfg.task.signal
+    task_target = cfg.task.target
     cfg_partial = OmegaConf.to_object(hydra.utils.instantiate(cfg))
     task = cfg_partial['task']
     train_dataset, test_dataset = sample_dataset(task, **cfg_partial['dataset'])
@@ -27,6 +32,8 @@ def main(cfg):
     inputs, targets = next(iter(train_loader))
     cfg_partial["input_size"] = inputs.shape[-1]
     cfg_partial["output_size"] = targets.shape[-1]
+    cfg_partial["task_signal"] = task_signal
+    cfg_partial["task_target"] = task_target
     del train_loader, inputs, targets
 
     def train_loop_per_worker(config):
@@ -52,11 +59,15 @@ def main(cfg):
             batch_size=config["batch_size"], dtypes=torch.float
         )
         trainer.fit(model, train_dataloader, test_dataloader)
+        r2 = trainer.progress_bar_metrics.get('val_r2', np.nan)
+        acc = trainer.progress_bar_metrics.get('val_acc', np.nan)
 
         model_params = model.model.state_dict()
-        checkpoint_dir = Path(f"results/{cfg.run_name}/checkpoints")
+        task_signal = config["task_signal"]
+        task_target = config["task_target"]
+        checkpoint_dir = root_dir / f"checkpoints/{task_signal}_{task_target}"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        torch.save(model_params, checkpoint_dir / f"{secrets.token_hex(16)}.ckpt")
+        torch.save(model_params, checkpoint_dir / f"{secrets.token_hex(8)}-r2={r2:.2f}-acc={acc:.2f}.ckpt")
 
     # Define configurations.
     scaling_config = ScalingConfig(

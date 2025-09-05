@@ -10,7 +10,7 @@ def lin_reg_loss(inputs, targets, alpha=0.0):
         y = targets.reshape(-1, targets.shape[-1])
         if alpha > 0:
             XTy = X.T @ y
-            XTX = X.T @ X + alpha * torch.eye(X.shape[-1])
+            XTX = X.T @ X + alpha * torch.eye(X.shape[-1], device=X.device)
             w = torch.linalg.lstsq(XTX, XTy).solution
         else:
             w = torch.linalg.lstsq(X, y).solution
@@ -23,7 +23,7 @@ def lin_reg_r2(inputs, targets, alpha=0.0):
     y = targets.reshape(-1, targets.shape[-1])
     if alpha > 0:
         XTy = X.T @ y
-        XTX = X.T @ X + alpha * torch.eye(X.shape[-1])
+        XTX = X.T @ X + alpha * torch.eye(X.shape[-1], device=X.device)
         w = torch.linalg.lstsq(XTX, XTy).solution
     else:
         w = torch.linalg.lstsq(X, y).solution
@@ -40,7 +40,7 @@ def lin_reg_acc(inputs, targets, alpha=0.0, threshold=0.5, window=10):
     y = targets.reshape(-1, targets.shape[-1])
     if alpha > 0:
         XTy = X.T @ y
-        XTX = X.T @ X + alpha * torch.eye(X.shape[-1])
+        XTX = X.T @ X + alpha * torch.eye(X.shape[-1], device=X.device)
         w = torch.linalg.lstsq(XTX, XTy).solution
     else:
         w = torch.linalg.lstsq(X, y).solution

@@ -15,6 +15,7 @@ dataset:
 optimizer:
   init_lr: 1e-3
   weight_decay: 0.0
+  reg_alpha: 0.0
 
 trainer:
   max_epochs: 300

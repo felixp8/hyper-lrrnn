@@ -8,7 +8,7 @@ from hyper_lrrnn.rnn import LowRankRNNWithReadout, FullRankRNNWithReadout, Mixtu
 
 
 class RNNLightningModule(L.LightningModule):
-    def __init__(self, model, init_lr=1e-3, weight_decay=1e-4):
+    def __init__(self, model, init_lr=1e-3, weight_decay=1e-4, reg_alpha=0.0):
         super().__init__()
         self.save_hyperparameters(ignore=['model'])
         self.model = model
@@ -33,6 +33,10 @@ class RNNLightningModule(L.LightningModule):
         output = self(inputs)
         loss = self.loss_fn(output, target)
         self.log('train_loss', loss)
+        if self.hparams.reg_alpha > 0 and hasattr(self.model, '_reg_loss'):
+            reg_loss = self.model._reg_loss()
+            loss = loss + self.hparams.reg_alpha * reg_loss
+            self.log('reg_loss', reg_loss)
         return loss
 
     def validation_step(self, batch, batch_idx):

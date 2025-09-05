@@ -10,6 +10,9 @@ from hyper_lrrnn.training.trainer import RNNLightningModule
 from hyper_lrrnn.training.utils import sample_dataset
 
 
+root_dir = Path(__file__).parent
+
+
 @hydra.main(config_path="config", config_name="config", version_base="1.1")
 def main(cfg):
     task = hydra.utils.instantiate(cfg.task)
@@ -34,7 +37,7 @@ def main(cfg):
     model_params = model.model.state_dict()
     task_signal = cfg.task.signal
     task_target = cfg.task.target
-    checkpoint_dir = Path(f"/data/user_data/fcpei/hyper-lrrnn/scripts/train_rnn/checkpoints/{task_signal}_{task_target}")
+    checkpoint_dir = root_dir / f"checkpoints/{task_signal}_{task_target}"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     print(f"saving model to {checkpoint_dir.absolute()}")
     torch.save(model_params, checkpoint_dir / f"{secrets.token_hex(8)}-r2={r2:.2f}-acc={acc:.2f}.ckpt")

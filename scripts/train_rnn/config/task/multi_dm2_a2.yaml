@@ -1,0 +1,5 @@
+_target_: hyper_lrrnn.tasks.dm.MultiDM2
+_partial_: true
+dt: 20
+signal: "amp"
+target: "2"

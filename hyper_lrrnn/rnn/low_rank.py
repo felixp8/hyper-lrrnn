@@ -4,7 +4,7 @@ import torch.nn as nn
 
 
 class LowRankRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, rank=2, alpha=0.1, activation="tanh"):
+    def __init__(self, input_size, hidden_size, rank=2, alpha=0.1, activation="tanh", output_size=None):
         super(LowRankRNN, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -32,7 +32,10 @@ class LowRankRNN(nn.Module):
             hiddens.append(h)
         hiddens = torch.stack(hiddens, dim=1)
         return hiddens
-
+    
+    def _reg_loss(self):
+        dots = self.m.T @ self.I
+        return (dots ** 2).mean()
 
 class LowRankRNNWithReadout(LowRankRNN):
     def __init__(self, input_size, hidden_size, output_size, rank=2, alpha=0.1, activation="tanh"):

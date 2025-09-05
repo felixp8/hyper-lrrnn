@@ -9,7 +9,7 @@ def is_psd(mat):
 
 
 class MixtureLowRankRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, rank=2, num_mixtures=1, alpha=0.1, activation="tanh"):
+    def __init__(self, input_size, hidden_size, rank=2, num_mixtures=1, alpha=0.1, activation="tanh", output_size=None):
         super(MixtureLowRankRNN, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -92,6 +92,7 @@ class MixtureLowRankRNN(nn.Module):
         n = torch.cat(n, dim=0)
         I = torch.cat(I, dim=0)
 
+        # NOTE: should divide by hidden_size here but skipping for consistency with LowRankRNN
         J = m @ n.T  # (N, r) x (r, N) = (N, N)
         span = torch.cat([m, I], axis=1)  # (N, r + I)
 
