@@ -37,6 +37,10 @@ class RNNLightningModule(L.LightningModule):
             reg_loss = self.model._reg_loss()
             loss = loss + self.hparams.reg_alpha * reg_loss
             self.log('reg_loss', reg_loss)
+        if hasattr(self.model, "_participation_ratio"):
+            with torch.no_grad():
+                pr = self.model._participation_ratio()
+            self.log('participation_ratio', pr)
         return loss
 
     def validation_step(self, batch, batch_idx):

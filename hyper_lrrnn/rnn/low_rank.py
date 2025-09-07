@@ -32,10 +32,19 @@ class LowRankRNN(nn.Module):
             hiddens.append(h)
         hiddens = torch.stack(hiddens, dim=1)
         return hiddens
-    
+
+    def _participation_ratio(self):
+        norms = self.m.norm(dim=0) * self.n.norm(dim=0)
+        pr = torch.square(torch.sum(norms)) / torch.sum(torch.square(norms)).clamp(min=1e-8)
+        return pr
+
     def _reg_loss(self):
-        dots = self.m.T @ self.I
-        return (dots ** 2).mean()
+        dots = self.m.T @ self.I  # shape (rank, input_size)
+        norms = self.m.norm(dim=0)[:, None] * self.I.norm(dim=0)[None, :]  # shape (rank, input_size)
+        sim = dots / norms.clamp(min=1e-8)  # shape (rank, input_size)
+
+        pr = self._participation_ratio()
+        return (sim ** 2).mean() + pr
 
 class LowRankRNNWithReadout(LowRankRNN):
     def __init__(self, input_size, hidden_size, output_size, rank=2, alpha=0.1, activation="tanh"):
