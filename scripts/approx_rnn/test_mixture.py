@@ -14,10 +14,13 @@ from hyper_lrrnn.rnn.mixture_low_rank import MixtureLowRankRNN
 from hyper_lrrnn.training.loss import lin_reg_r2, lin_reg_acc
 
 
+Path("mixture_params").mkdir(exist_ok=True)
+
+
 import argparse
 parser = argparse.ArgumentParser(description="Evaluate mixture model parameters.")
-parser.add_argument("--task_signal", type=str, default="integral")
-parser.add_argument("--task_target", type=str, default="2")
+parser.add_argument("--task_signal", type=str, default="mean")
+parser.add_argument("--task_target", type=str, default="1")
 parser.add_argument("--n_mixtures", type=int, default=1)
 args = parser.parse_args()
 
@@ -33,7 +36,7 @@ input_size = dataset["inputs"].shape[-1]
 
 
 # load model checkpoints
-rank = 3
+rank = 5
 model_path = Path(f"../train_rnn/checkpoints/{task_signal}_{task_target}")
 model_ckpts = sorted(model_path.glob("*.ckpt"))
 
@@ -49,6 +52,8 @@ for checkpoint_path in model_ckpts:
     #     continue
     orig_r2s.append(r2)
     orig_accs.append(acc)
+
+    import pdb; pdb.set_trace()
 
     chkpt = torch.load(checkpoint_path, map_location="cpu")
     m = chkpt['m']

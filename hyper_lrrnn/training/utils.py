@@ -15,8 +15,28 @@ def sample_dataset(task, dataset_size, train_frac, noise_std, kwargs=dict(), see
     targets = np.stack(targets, axis=0)
     if targets.ndim == 2:
         targets = targets[..., None]
-    dataset = torch.utils.data.TensorDataset(torch.Tensor(inputs), torch.Tensor(targets))
+    dataset = torch.utils.data.TensorDataset(torch.Tensor(inputs).float(), torch.Tensor(targets).float())
     train_size = int(train_frac * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
+    return train_dataset, test_dataset
+
+
+def sample_ray_dataset(task, dataset_size, train_frac, noise_std, kwargs=dict(), seed=0):
+    import ray
+    env = task(**kwargs)
+    env.reset(seed=seed)
+
+    inputs = []
+    targets = []
+    for i in range(dataset_size):
+        env.new_trial()
+        inputs.append(env.ob + np.random.normal(0, noise_std, size=env.ob.shape))
+        targets.append(env.gt)
+    inputs = np.stack(inputs, axis=0).astype(np.float32)
+    targets = np.stack(targets, axis=0).astype(np.float32)
+    if targets.ndim == 2:
+        targets = targets[..., None]
+    dataset = ray.data.from_items([{"input": inp, "target": tgt} for inp, tgt in zip(inputs, targets)])
+    train_dataset, test_dataset = dataset.train_test_split(test_size=(1 - train_frac))
     return train_dataset, test_dataset

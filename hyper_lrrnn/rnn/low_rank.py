@@ -4,12 +4,14 @@ import torch.nn as nn
 
 
 class LowRankRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, rank=2, alpha=0.1, activation="tanh", output_size=None):
+    def __init__(self, input_size, hidden_size, rank=2, alpha=0.1, activation="tanh", output_size=None, orth_gain=1.0, pr_gain=1.0):
         super(LowRankRNN, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.rank = rank
         self.alpha = alpha
+        self.orth_gain = orth_gain
+        self.pr_gain = pr_gain
 
         self.m = nn.Parameter(torch.randn(hidden_size, rank) / math.sqrt(hidden_size))
         self.n = nn.Parameter(torch.randn(hidden_size, rank) / math.sqrt(hidden_size))
@@ -44,12 +46,12 @@ class LowRankRNN(nn.Module):
         sim = dots / norms.clamp(min=1e-8)  # shape (rank, input_size)
 
         pr = self._participation_ratio()
-        return (sim ** 2).mean() + pr
+        return (sim ** 2).mean() * self.orth_gain + pr * self.pr_gain
 
 class LowRankRNNWithReadout(LowRankRNN):
-    def __init__(self, input_size, hidden_size, output_size, rank=2, alpha=0.1, activation="tanh"):
+    def __init__(self, input_size, hidden_size, output_size, rank=2, alpha=0.1, activation="tanh", orth_gain=1.0, pr_gain=1.0):
         super(LowRankRNNWithReadout, self).__init__(
-            input_size, hidden_size, rank, alpha, activation
+            input_size, hidden_size, rank, alpha, activation, output_size, orth_gain, pr_gain
         )
         self.readout = nn.Linear(hidden_size, output_size)
 

@@ -29,7 +29,11 @@ class RNNLightningModule(L.LightningModule):
         return self.model(inputs)
 
     def training_step(self, batch, batch_idx):
-        inputs, target = batch
+        if isinstance(batch, dict):
+            inputs = batch["input"]
+            target = batch["target"]
+        else:
+            inputs, target = batch
         output = self(inputs)
         loss = self.loss_fn(output, target)
         self.log('train_loss', loss)
@@ -44,7 +48,11 @@ class RNNLightningModule(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        inputs, target = batch
+        if isinstance(batch, dict):
+            inputs = batch["input"]
+            target = batch["target"]
+        else:
+            inputs, target = batch
         output = self(inputs)
         loss = self.loss_fn(output, target)
         self.log('val_loss', loss)

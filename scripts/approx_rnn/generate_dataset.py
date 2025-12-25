@@ -1,16 +1,25 @@
 import numpy as np
 from hyper_lrrnn.training.utils import sample_dataset
-from hyper_lrrnn.tasks.dm import MultiDM
+from hyper_lrrnn.tasks.dm import MultiDM, MultiDM2
 import functools
 import itertools
+from pathlib import Path
 
 
-task_signal = ["mean", "time", "integral"]
+Path("datasets").mkdir(exist_ok=True)
+
+
+task_class = MultiDM2
+task_signal = {
+    MultiDM: ["mean", "time", "integral"],
+    MultiDM2: ["mean", "amp", "freq"],
+}[task_class]
 task_target = ["1", "2", "sum", "diff"]
+
 
 for signal, target in itertools.product(task_signal, task_target):
     task = functools.partial(
-        MultiDM,
+        task_class,
         signal=signal,
         target=target,
     )

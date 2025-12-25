@@ -1,6 +1,6 @@
 defaults:
   - model: low_rank_readout
-  - task: multi_dm2_f1
+  - task: multi_dm2_m1
   - _self_
 
 run_name: run-${now:%Y-%m-%d_%H-%M-%S}
@@ -15,19 +15,19 @@ dataset:
 optimizer:
   init_lr: 1e-3
   weight_decay: 0.0
-  reg_alpha: 1e-4
+  reg_alpha: 0.0
 
 trainer:
-  max_epochs: 3000
+  max_epochs: 2000
   log_every_n_steps: 32
   enable_model_summary: false
   enable_checkpointing: false
   enable_progress_bar: false
 
-logger: 
+logger: # null
   _target_: lightning.pytorch.loggers.WandbLogger
   _partial_: true
-  project: hyper-lrrnn
+  project: lrrnn-compress
   save_dir: results/${run_name}/wandb_logs
 
 hydra:
