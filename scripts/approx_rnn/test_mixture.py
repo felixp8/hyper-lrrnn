@@ -53,7 +53,7 @@ for checkpoint_path in model_ckpts:
     orig_r2s.append(r2)
     orig_accs.append(acc)
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
 
     chkpt = torch.load(checkpoint_path, map_location="cpu")
     m = chkpt['m']
@@ -64,6 +64,7 @@ for checkpoint_path in model_ckpts:
     gm = GaussianMixture(n_mixtures, random_state=0)
     gm.fit(samples)
 
+    weights = gm.weights_
     means = gm.means_
     covariances = gm.covariances_
 
@@ -77,6 +78,7 @@ for checkpoint_path in model_ckpts:
     mixture_sort = np.argsort(means[:, 0])
     means = means[mixture_sort]
     covariances = covariances[mixture_sort]
+    weights = weights[mixture_sort]
 
     tril = np.linalg.cholesky(covariances)
     i1, i2 = np.tril_indices(samples.shape[-1])
@@ -84,7 +86,7 @@ for checkpoint_path in model_ckpts:
         tril = tril[i1, i2]
     else:
         tril = tril[:, i1, i2]
-    params.append(np.concatenate([means.flatten(), tril.flatten()]))
+    params.append(np.concatenate([means.flatten(), tril.flatten(), weights.flatten()]))
 
 params = np.stack(params, axis=0)
 orig_r2s = np.array(orig_r2s)
@@ -111,12 +113,14 @@ for param in params:
     means = param[:dim * n_mixtures]
     means = means.reshape(n_mixtures, dim)
 
-    tril = param[dim * n_mixtures:]
+    tril = param[dim * n_mixtures:-n_mixtures]
     tril = tril.reshape(n_mixtures, -1)
     tril_full = np.zeros((n_mixtures, dim, dim))
     for i in range(n_mixtures):
         j, k = np.tril_indices(dim)
         tril_full[i, j, k] = tril[i]
+
+    weights = param[-n_mixtures:]
 
     model = MixtureLowRankRNN(input_size, 500, rank=rank, num_mixtures=n_mixtures, alpha=0.1, activation="tanh")
 
@@ -135,9 +139,11 @@ for param in params:
 
     assert model.means.shape == means.shape
     assert model.scale_tril.shape == tril_full.shape
-    model.means.data = torch.tensor(means).to(torch.float)
-    model.scale_tril.data = torch.tensor(tril_full).to(torch.float)
-
+    assert model.mixture_weights.shape[0] == weights.shape[0]
+    with torch.no_grad():
+        model.means.data = torch.tensor(means).to(torch.float)
+        model.scale_tril.data = torch.tensor(tril_full).to(torch.float)
+        model.mixture_weights.data = torch.tensor(weights).to(torch.float) / np.sum(weights)
     model.eval()
     with torch.no_grad():
         total_r2 = 0

@@ -11,6 +11,7 @@ from hyper_lrrnn.training.trainer import RNNLightningModule
 from hyper_lrrnn.training.utils import sample_dataset
 from hyper_lrrnn.rnn.mixture_low_rank import MixtureLowRankRNN
 from hyper_lrrnn.training.loss import lin_reg_r2, lin_reg_acc
+from hyper_lrrnn.training.regularizer import Regularizer
 
 
 root_dir = Path(__file__).parent
@@ -71,6 +72,7 @@ class CompressibilityCallback(L.Callback):
         with torch.no_grad():
             mix_model.means.data = torch.tensor(means, dtype=torch.float32)
             mix_model.scale_tril.data = torch.tensor(tril, dtype=torch.float32)
+            mix_model.mixture_weights.data = torch.tensor(gmm.weights_, dtype=torch.float32)
         return mix_model
     
     def _eval_mixture_rnn(self, model, eval_loader, gmm, resamples=None):
@@ -201,9 +203,14 @@ def main(cfg):
     input_size = inputs.shape[-1]
     output_size = targets.shape[-1]
 
+    if hasattr(cfg, 'regularizer') and cfg.regularizer is not None:
+        regularizer = Regularizer(**cfg.regularizer)
+    else:
+        regularizer = None
+
     model = hydra.utils.instantiate(cfg.model)
     model = model(input_size=input_size, output_size=output_size)
-    model = RNNLightningModule(model=model, **cfg.optimizer)
+    model = RNNLightningModule(model=model, regularizer=regularizer, **cfg.optimizer)
 
     logger = hydra.utils.instantiate(cfg.logger)
     if callable(logger):

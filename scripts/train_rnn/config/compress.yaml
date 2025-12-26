@@ -15,7 +15,6 @@ dataset:
 optimizer:
   init_lr: 1e-3
   weight_decay: 0.0
-  reg_alpha: 0.0
 
 trainer:
   max_epochs: 2000
@@ -23,6 +22,13 @@ trainer:
   enable_model_summary: false
   enable_checkpointing: false
   enable_progress_bar: false
+
+regularizer:
+  pr_weight: 0.0
+  orth_weight: 0.0
+  nll_weight: 0.0
+  num_mixtures: 1
+  ema_gamma: 0.9
 
 logger: # null
   _target_: lightning.pytorch.loggers.WandbLogger

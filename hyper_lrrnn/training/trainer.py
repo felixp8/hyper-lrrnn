@@ -8,10 +8,11 @@ from hyper_lrrnn.rnn import LowRankRNNWithReadout, FullRankRNNWithReadout, Mixtu
 
 
 class RNNLightningModule(L.LightningModule):
-    def __init__(self, model, init_lr=1e-3, weight_decay=1e-4, reg_alpha=0.0):
+    def __init__(self, model, init_lr=1e-3, weight_decay=1e-4, regularizer=None):
         super().__init__()
-        self.save_hyperparameters(ignore=['model'])
+        self.save_hyperparameters(ignore=['model', 'regularizer'])
         self.model = model
+        self.regularizer = regularizer
 
         if isinstance(model, (LowRankRNNWithReadout, FullRankRNNWithReadout, MixtureLowRankRNNWithReadout)):
             self.loss_fn = torch.nn.functional.mse_loss
@@ -37,14 +38,10 @@ class RNNLightningModule(L.LightningModule):
         output = self(inputs)
         loss = self.loss_fn(output, target)
         self.log('train_loss', loss)
-        if self.hparams.reg_alpha > 0 and hasattr(self.model, '_reg_loss'):
-            reg_loss = self.model._reg_loss()
-            loss = loss + self.hparams.reg_alpha * reg_loss
+        if self.regularizer is not None:
+            reg_loss = self.regularizer(self.model)
+            loss = loss + reg_loss
             self.log('reg_loss', reg_loss)
-        if hasattr(self.model, "_participation_ratio"):
-            with torch.no_grad():
-                pr = self.model._participation_ratio()
-            self.log('participation_ratio', pr)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -60,6 +57,10 @@ class RNNLightningModule(L.LightningModule):
         self.log('val_r2', metric, prog_bar=True, on_step=False, on_epoch=True)
         metric = self.acc_fn(output, target)
         self.log('val_acc', metric, prog_bar=True, on_step=False, on_epoch=True)
+        if hasattr(self.model, "_participation_ratio"):
+            with torch.no_grad():
+                pr = self.model._participation_ratio()
+            self.log('participation_ratio', pr, on_step=False, on_epoch=True)
         return loss
 
     def configure_optimizers(self):

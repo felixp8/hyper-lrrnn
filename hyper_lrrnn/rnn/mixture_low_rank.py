@@ -18,7 +18,8 @@ class MixtureLowRankRNN(nn.Module):
         self.alpha = alpha
         self.base_scale = base_scale
 
-        self._mixture_sizes = np.diff(np.round(np.linspace(0, hidden_size, num_mixtures + 1)[1:]), prepend=0).astype(int)
+        self.mixture_weights = nn.Parameter(torch.ones(num_mixtures) / num_mixtures, requires_grad=False)
+        # self._mixture_sizes = np.diff(np.round(np.linspace(0, hidden_size, num_mixtures + 1)[1:]), prepend=0).astype(int)
 
         self.means = nn.Parameter(torch.zeros(num_mixtures, 2 * rank + input_size))
 
@@ -77,10 +78,13 @@ class MixtureLowRankRNN(nn.Module):
         m = []
         n = []
         I = []
+        mixture_sizes = torch.diff(torch.round(
+            torch.cumsum((self.mixture_weights / torch.sum(self.mixture_weights)) * self.hidden_size, dim=0)
+        ), prepend=torch.tensor([0.0], device=self.mixture_weights.device)).long().tolist()
         for i in range(self.num_mixtures):
             mean = self.means[i]
             scale_tril = self.scale_tril[i]
-            mixture_size = self._mixture_sizes[i]
+            mixture_size = mixture_sizes[i]
             samp = torch.distributions.MultivariateNormal(
                 loc=mean, scale_tril=scale_tril).rsample((mixture_size,))
             m_mixture = samp[:, :self.rank]
