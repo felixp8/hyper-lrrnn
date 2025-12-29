@@ -4,3 +4,4 @@ alpha: 0.1
 activation: tanh
 rank: 2
 hidden_size: 500
+dropout_rate: 0.0

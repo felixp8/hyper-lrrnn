@@ -73,3 +73,60 @@ class RNNLightningModule(L.LightningModule):
             #     # "frequency": "indicates how often the metric is updated",
             # },
         }
+
+
+class DistillLightningModule(L.LightningModule):
+    def __init__(self, model, params, init_lr=1e-3, weight_decay=1e-4, nll_weight=1.0):
+        super().__init__()
+        self.save_hyperparameters(ignore=['model', 'params'])
+        self.model = model
+        self.params = params.detach()
+        self.loss_fn = torch.nn.functional.mse_loss
+        self.r2_fn = functools.partial(lin_reg_r2, alpha=0.01)
+        self.acc_fn = functools.partial(lin_reg_acc, alpha=0.01, threshold=0.5, window=10)
+
+    def forward(self, inputs):
+        return self.model(inputs)
+
+    def gaussian_mixture_nll(self):
+        if not hasattr(self.model, "scale_tril"):
+            return 0.0
+        mixture_weights = self.model.mixture_weights
+        means = self.model.means
+        scale_tril = self.model.scale_tril
+        dist = torch.distributions.MixtureSameFamily(
+            torch.distributions.Categorical(probs=mixture_weights),
+            torch.distributions.MultivariateNormal(loc=means, scale_tril=scale_tril),
+        )
+        nll = -dist.log_prob(self.params).mean()
+        return nll
+
+    def training_step(self, batch, batch_idx):
+        inputs, model_output, target = batch
+        output = self(inputs)
+        loss = self.loss_fn(output, model_output)
+        nll = self.gaussian_mixture_nll()
+        self.log('mse_loss', loss)
+        self.log('nll_loss', nll)
+        loss = loss + self.hparams.nll_weight * nll
+        self.log('train_loss', loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        inputs, model_output, target = batch
+        output = self(inputs)
+        loss = self.loss_fn(output, model_output)
+        nll = self.gaussian_mixture_nll()
+        self.log('val_mse_loss', loss)
+        self.log('val_nll_loss', nll)
+        loss = loss + self.hparams.nll_weight * nll
+        self.log('val_loss', loss)
+        metric = self.r2_fn(output, target)
+        self.log('val_r2', metric, prog_bar=True, on_step=False, on_epoch=True)
+        metric = self.acc_fn(output, target)
+        self.log('val_acc', metric, prog_bar=True, on_step=False, on_epoch=True)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.hparams.init_lr, weight_decay=self.hparams.weight_decay)
+        return optimizer

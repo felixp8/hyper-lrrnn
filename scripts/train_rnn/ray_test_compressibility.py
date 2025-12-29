@@ -1,4 +1,6 @@
+import os
 import shutil
+import copy
 from datetime import datetime
 from pathlib import Path
 
@@ -10,17 +12,18 @@ import lightning as L
 from pathlib import Path
 from sklearn.mixture import GaussianMixture
 import secrets
+import random
 
-from ray import tune
-from ray.tune import CLIReporter
-from ray.tune.schedulers import FIFOScheduler
-from ray.tune.suggest.basic_variant import BasicVariantGenerator
-
+import ray
+import ray.train.lightning
+from ray.train.torch import TorchTrainer
+from ray.train import ScalingConfig
 
 from hyper_lrrnn.training.trainer import RNNLightningModule
-from hyper_lrrnn.training.utils import sample_dataset
+from hyper_lrrnn.training.utils import sample_dataset, sample_ray_dataset
 from hyper_lrrnn.rnn.mixture_low_rank import MixtureLowRankRNN
 from hyper_lrrnn.training.loss import lin_reg_r2, lin_reg_acc
+from hyper_lrrnn.training.regularizer import Regularizer
 
 
 root_dir = Path(__file__).parent
@@ -81,6 +84,7 @@ class CompressibilityCallback(L.Callback):
         with torch.no_grad():
             mix_model.means.data = torch.tensor(means, dtype=torch.float32)
             mix_model.scale_tril.data = torch.tensor(tril, dtype=torch.float32)
+            mix_model.mixture_weights.data = torch.tensor(gmm.weights_, dtype=torch.float32)
         return mix_model
     
     def _eval_mixture_rnn(self, model, eval_loader, gmm, resamples=None):
@@ -94,6 +98,7 @@ class CompressibilityCallback(L.Callback):
         for draw in range(resamples):
             total_r2 = 0.0
             total_acc = 0.0
+            n_batches = 0
             with torch.no_grad():
                 for batch in eval_loader:
                     if isinstance(batch, dict):
@@ -201,50 +206,117 @@ class CompressibilityCallback(L.Callback):
                 trainer.logger.log_metrics(stats, step=trainer.global_step)
 
 
-# ---------- OPTIONS -----------
-PROJECT_STR = "lfads-torch-example"
-DATASET_STR = "nlb_mc_maze"
-RUN_TAG = datetime.now().strftime("%y%m%d") + "_exampleMulti"
-RUN_DIR = Path("/snel/share/runs") / PROJECT_STR / DATASET_STR / RUN_TAG
-# ------------------------------
+regularizer_choices = [
+    *[{"nll_weight": nw, "num_mixtures": 1, "ema_gamma": 0.9} for nw in np.logspace(-4, 0, 5)],
+    *[{"nll_weight": nw, "num_mixtures": 2, "ema_gamma": 0.9} for nw in np.logspace(-4, 0, 5)],
+    *[{"nll_weight": nw, "num_mixtures": 1, "ema_gamma": 0.5} for nw in np.logspace(-4, 0, 5)],
+    *[{"nll_weight": nw, "num_mixtures": 2, "ema_gamma": 0.5} for nw in np.logspace(-4, 0, 5)],
+    *[{"dist_weight": dw, "dist_type": "mmd", "num_mixtures": 1, "ema_gamma": 0.9} for dw in np.logspace(-4, 0, 5)],
+    *[{"dist_weight": dw, "dist_type": "mmd", "num_mixtures": 2, "ema_gamma": 0.9} for dw in np.logspace(-4, 0, 5)],
+    *[{"dist_weight": dw, "dist_type": "mmd", "num_mixtures": 1, "ema_gamma": 0.5} for dw in np.logspace(-4, 0, 5)],
+    *[{"dist_weight": dw, "dist_type": "mmd", "num_mixtures": 2, "ema_gamma": 0.5} for dw in np.logspace(-4, 0, 5)],
+    *[{"dist_weight": dw, "dist_type": "swd", "num_mixtures": 1, "ema_gamma": 0.9} for dw in np.logspace(-4, 0, 5)],
+    *[{"dist_weight": dw, "dist_type": "swd", "num_mixtures": 2, "ema_gamma": 0.9} for dw in np.logspace(-4, 0, 5)],
+    *[{"dist_weight": dw, "dist_type": "swd", "num_mixtures": 1, "ema_gamma": 0.5} for dw in np.logspace(-4, 0, 5)],
+    *[{"dist_weight": dw, "dist_type": "swd", "num_mixtures": 2, "ema_gamma": 0.5} for dw in np.logspace(-4, 0, 5)],
+    *[{"orth_weight": ow} for ow in np.logspace(-4, 0, 5)],
+]
 
-# Set the mandatory config overrides to select datamodule and model
-mandatory_overrides = {
-    "datamodule": DATASET_STR,
-    "model": DATASET_STR,
-    "logger.wandb_logger.project": PROJECT_STR,
-    "logger.wandb_logger.tags.1": DATASET_STR,
-    "logger.wandb_logger.tags.2": RUN_TAG,
-}
-RUN_DIR.mkdir(parents=True)
-# Copy this script into the run directory
-shutil.copyfile(__file__, RUN_DIR / Path(__file__).name)
-# Run the hyperparameter search
-tune.run(
-    tune.with_parameters(
-        run_model,
-        config_path="../configs/multi.yaml",
-    ),
-    metric="valid/recon_smth",
-    mode="min",
-    name=RUN_DIR.name,
-    config={
-        **mandatory_overrides,
-        "model.dropout_rate": tune.uniform(0.0, 0.6),
-        "model.kl_co_scale": tune.loguniform(1e-6, 1e-4),
-        "model.kl_ic_scale": tune.loguniform(1e-6, 1e-3),
-        "model.l2_gen_scale": tune.loguniform(1e-4, 1e0),
-        "model.l2_con_scale": tune.loguniform(1e-4, 1e0),
-    },
-    resources_per_trial=dict(cpu=3, gpu=0.5),
-    num_samples=60,
-    local_dir=RUN_DIR.parent,
-    search_alg=BasicVariantGenerator(random_state=0),
-    scheduler=FIFOScheduler(),
-    verbose=1,
-    progress_reporter=CLIReporter(
-        metric_columns=["valid/recon_smth", "cur_epoch"],
-        sort_by_metric=True,
-    ),
-    trial_dirname_creator=lambda trial: str(trial),
-)
+
+@hydra.main(config_path="config", config_name="compress", version_base="1.1")
+def main(cfg):
+    ray.init(
+        # _temp_dir=str((root_dir / "ray").absolute()),
+    )
+    base_config = OmegaConf.to_object(cfg)
+
+    task_signal = cfg.task.signal
+    task_target = cfg.task.target
+    cfg_partial = OmegaConf.to_object(hydra.utils.instantiate(cfg))
+    task = cfg_partial['task']
+    train_dataset, test_dataset = sample_ray_dataset(task, **cfg_partial['dataset'])
+    data = train_dataset.take(1)
+    inputs = np.stack([item["input"] for item in data], axis=0)
+    targets = np.stack([item["target"] for item in data], axis=0)
+    cfg_partial["input_size"] = inputs.shape[-1]
+    cfg_partial["output_size"] = targets.shape[-1]
+    cfg_partial["task_signal"] = task_signal
+    cfg_partial["task_target"] = task_target
+    del inputs, targets
+
+    def train_loop_per_worker(config):
+        run_token = secrets.token_hex(8)
+        run_name = config["run_name"]
+
+        # Fetch training dataset.
+        train_dataset_shard = ray.train.get_dataset_shard("train")
+        test_dataset_shard = ray.train.get_dataset_shard("test")
+
+        regularizer_config = random.choice(regularizer_choices)
+        regularizer = Regularizer(**regularizer_config)
+
+        # Instantiate and prepare model for training.
+        model = config["model"](input_size=config["input_size"], output_size=config["output_size"])
+        model = RNNLightningModule(model=model, **config["optimizer"], regularizer=regularizer)
+
+        # Define loss and optimizer.
+        config_cp = copy.deepcopy(base_config)
+        config_cp['regularizer'] = regularizer_config
+        logger = config["logger"](name=f"{run_name}-{run_token}", config=config_cp)
+        compress_cb = CompressibilityCallback(n_mixtures=(1, 2, 3), n_subset_resamples=20, n_model_resamples=20, random_seed=0, log_frequency=20)
+        trainer = L.Trainer(
+            **config["trainer"], 
+            logger=logger,
+            # strategy=ray.train.lightning.RayDDPStrategy(),
+            # plugins=[ray.train.lightning.RayLightningEnvironment()],
+            # callbacks=[ray.train.lightning.RayTrainReportCallback()],
+            callbacks=[compress_cb]
+        )
+        # trainer = ray.train.lightning.prepare_trainer(trainer)
+
+        # Create data loader.
+        train_dataloader = train_dataset_shard.iter_torch_batches(
+            batch_size=config["batch_size"]
+        )
+        test_dataloader = test_dataset_shard.iter_torch_batches(
+            batch_size=config["batch_size"]
+        )
+        trainer.fit(model, train_dataloader, test_dataloader)
+        r2 = trainer.progress_bar_metrics.get('val_r2', np.nan)
+        acc = trainer.progress_bar_metrics.get('val_acc', np.nan)
+
+        model_params = model.model.state_dict()
+        task_signal = config["task_signal"]
+        task_target = config["task_target"]
+        checkpoint_dir = root_dir / f"tc_checkpoints/{task_signal}_{task_target}"
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        torch.save(model_params, checkpoint_dir / f"{run_token}-r2={r2:.2f}-acc={acc:.2f}.ckpt")
+
+    # Define configurations.
+    scaling_config = ScalingConfig(
+        num_workers=len(os.sched_getaffinity(0)) // 2 - 1, 
+        use_gpu=False,
+        resources_per_worker={"CPU": 2, "GPU": 0.0},
+    )
+
+    # Define datasets.
+    datasets = {"train": train_dataset, "test": test_dataset}
+    dataset_config = ray.train.DataConfig(
+        datasets_to_split=[],
+    )
+
+    # Initialize the Trainer.
+    trainer = TorchTrainer(
+        train_loop_per_worker=train_loop_per_worker,
+        train_loop_config=cfg_partial,
+        scaling_config=scaling_config,
+        # run_config=run_config,
+        datasets=datasets,
+        dataset_config=dataset_config,
+    )
+
+    # Train the model.
+    result = trainer.fit()
+
+if __name__ == "__main__":
+    main()

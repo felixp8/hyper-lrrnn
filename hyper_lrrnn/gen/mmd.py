@@ -24,7 +24,6 @@ def compute_rbf_mmd(x, y, bandwidth=1.0):
 def compute_rbf_mmd_median_heuristic(x, y):
     # https://arxiv.org/pdf/1707.07269.pdf
     bandwidth = median_heuristic(x, y)
-    print(bandwidth)
     return compute_rbf_mmd(x, y, bandwidth)
 
 

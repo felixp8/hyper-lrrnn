@@ -97,7 +97,6 @@ class MixtureLowRankRNN(nn.Module):
         n = torch.cat(n, dim=0)
         I = torch.cat(I, dim=0)
 
-        # NOTE: should divide by hidden_size here but skipping for consistency with LowRankRNN
         J = m @ n.T  # (N, r) x (r, N) = (N, N)
         J = J * self.base_scale / self.hidden_size
         span = torch.cat([m, I], axis=1)  # (N, r + I)

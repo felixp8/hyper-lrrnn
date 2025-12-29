@@ -214,3 +214,4 @@ scripts/train_rnn/checkpoints/
 scripts/approx_rnn/datasets/
 scripts/approx_rnn/mixture_params/
 scripts/gen_rnn/*/
+*.png

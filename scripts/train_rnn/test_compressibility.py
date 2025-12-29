@@ -216,15 +216,16 @@ def main(cfg):
     if callable(logger):
         logger = logger(config=OmegaConf.to_object(cfg))
     # create compressibility callback and wire into trainer
-    compress_cb = CompressibilityCallback(n_mixtures=(1, 2, 3), n_subset_resamples=20, n_model_resamples=20, random_seed=0, log_frequency=20)
+    compress_cb = CompressibilityCallback(n_mixtures=(1, 2), n_subset_resamples=20, n_model_resamples=20, random_seed=0, log_frequency=20)
     trainer = L.Trainer(**cfg.trainer, logger=logger, callbacks=[compress_cb])
     trainer.fit(model, train_loader, test_loader)
     # r2 = trainer.progress_bar_metrics.get('val_r2', np.nan)
     # acc = trainer.progress_bar_metrics.get('val_acc', np.nan)
 
-    # model_params = model.model.state_dict()
-    # task_signal = cfg.task.signal
-    # task_target = cfg.task.target
+    model_params = model.model.state_dict()
+    task_signal = cfg.task.signal
+    task_target = cfg.task.target
+    torch.save(model_params, f"{task_signal}_{task_target}_temp.ckpt")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ _partial_: true
 alpha: 0.1
 activation: tanh
 rank: 5
-hidden_size: 2000
+hidden_size: 500
 orth_gain: 1.0
 pr_gain: 1.0
+dropout_rate: 0.0
